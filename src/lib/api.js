@@ -43,4 +43,15 @@ export const api = {
     request(`/api/dashboard/tickets/${ticketId}/close`, {
       method: 'POST',
     }),
+  getCustomers: (orgId) => request(`/api/dashboard/${orgId}/customers`),
+  addCustomer: (orgId, customer) =>
+    request(`/api/dashboard/${orgId}/customers`, {
+      method: 'POST',
+      body: JSON.stringify(customer),
+    }),
+  updateKnowledge: (orgId, entries) =>
+    request(`/api/dashboard/${orgId}/knowledge`, {
+      method: 'PUT',
+      body: JSON.stringify({ entries }),
+    }),
 };

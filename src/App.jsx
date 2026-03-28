@@ -20,6 +20,7 @@ export default function App() {
   const [tickets, setTickets] = useState([]);
   const [calls, setCalls] = useState([]);
   const [metrics, setMetrics] = useState(null);
+  const [customers, setCustomers] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState('');
@@ -49,13 +50,7 @@ export default function App() {
     if (autoSyncRuns.current.has(runKey)) return;
     autoSyncRuns.current.add(runKey);
     handleSync();
-  }, [
-    activeView,
-    activeOrgId,
-    bundle,
-    syncing,
-    submitting,
-  ]);
+  }, [activeView, activeOrgId, bundle, syncing, submitting]);
 
   async function refreshOrgs() {
     try {
@@ -74,11 +69,12 @@ export default function App() {
 
   async function loadOrg(orgId) {
     try {
-      const [orgBundle, ticketData, callData, metricData] = await Promise.all([
+      const [orgBundle, ticketData, callData, metricData, customerData] = await Promise.all([
         api.getOrg(orgId),
         api.getTickets(orgId),
         api.getCalls(orgId),
         api.getMetrics(orgId),
+        api.getCustomers(orgId).catch(() => []),
       ]);
 
       startTransition(() => {
@@ -86,6 +82,7 @@ export default function App() {
         setTickets(ticketData);
         setCalls(callData);
         setMetrics(metricData);
+        setCustomers(customerData);
         setDraft(bundleToWizardState(orgBundle));
       });
     } catch (err) {
@@ -142,6 +139,24 @@ export default function App() {
     }
   }
 
+  async function handleAddCustomer(customer) {
+    try {
+      await api.addCustomer(activeOrgId, customer);
+      if (activeOrgId) await loadOrg(activeOrgId);
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function handleSaveKnowledge(entries) {
+    try {
+      await api.updateKnowledge(activeOrgId, entries);
+      if (activeOrgId) await loadOrg(activeOrgId);
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
   function showLaunchView() {
     beginNewLaunch();
   }
@@ -156,6 +171,11 @@ export default function App() {
     }
     setActiveView('settings');
     setWizardStep(0);
+  }
+
+  function handleOrgSwitch(orgId) {
+    setActiveOrgId(orgId);
+    setActiveView('operations');
   }
 
   const shellKpis = [
@@ -177,21 +197,33 @@ export default function App() {
 
         <div className="topbar-center">
           <button className={`nav-link ${activeView === 'launch' ? 'active' : ''}`} onClick={showLaunchView}>
-            Launch
+            New Agent
           </button>
           <button className={`nav-link ${activeView === 'settings' ? 'active' : ''}`} onClick={showSettingsView}>
-            Settings
+            Edit
           </button>
           <button className={`nav-link ${activeView === 'operations' ? 'active' : ''}`} onClick={showOperationsView}>
-            Operations
+            Dashboard
           </button>
         </div>
 
         <div className="topbar-actions">
-          <div className="workspace-chip">
-            <span className="workspace-chip-label">Workspace</span>
-            <strong>{bundle?.org?.name || orgs[0]?.name || 'EnergeX Internal'}</strong>
-          </div>
+          {orgs.length > 1 ? (
+            <select
+              className="org-switcher"
+              value={activeOrgId}
+              onChange={(e) => handleOrgSwitch(e.target.value)}
+            >
+              {orgs.map((org) => (
+                <option key={org.id} value={org.id}>{org.name}</option>
+              ))}
+            </select>
+          ) : (
+            <div className="workspace-chip">
+              <span className="workspace-chip-label">Workspace</span>
+              <strong>{bundle?.org?.name || orgs[0]?.name || 'EnergeX Internal'}</strong>
+            </div>
+          )}
           <button className="primary-button compact-primary" onClick={beginNewLaunch}>
             New
           </button>
@@ -206,21 +238,21 @@ export default function App() {
         <section className="workspace-intro">
           <div>
             <p className="eyebrow">
-              {activeView === 'launch' ? 'Guided setup' : activeView === 'settings' ? 'Configuration editor' : 'Live operations'}
+              {activeView === 'launch' ? 'Guided setup' : activeView === 'settings' ? 'Edit configuration' : 'Live dashboard'}
             </p>
             <h1>
               {activeView === 'launch'
-                ? 'Configure one receptionist at a time.'
+                ? 'Set up a new AI receptionist.'
                 : activeView === 'settings'
-                  ? 'Update the live configuration without touching Bland directly.'
-                  : 'Monitor what is live and what still needs action.'}
+                  ? 'Update your receptionist\'s settings.'
+                  : 'See how your receptionist is performing.'}
             </h1>
             <p className="workspace-copy">
               {activeView === 'launch'
-                ? 'Use a clean brief-driven workflow to shape the agent before it touches Bland or the phone layer.'
+                ? 'Answer a few questions about the business and we\'ll configure the AI agent automatically.'
                 : activeView === 'settings'
-                  ? 'Business details, routing, FAQs, hours, and escalation rules all live here. Saving pushes the current source of truth back into sync.'
-                  : 'Stay close to provisioning, tickets, call logs, and review scores without burying the team in dashboard noise.'}
+                  ? 'Change business details, routing, FAQs, and hours. Saving pushes updates to the live agent.'
+                  : 'Tickets, call history, customer records, and performance metrics — all in one place.'}
             </p>
           </div>
           {activeView === 'operations' ? (
@@ -254,9 +286,13 @@ export default function App() {
             tickets={tickets}
             calls={calls}
             metrics={metrics}
+            customers={customers}
+            knowledgeEntries={bundle?.knowledgeEntries || []}
             onSync={handleSync}
             syncing={syncing}
             onCloseTicket={handleCloseTicket}
+            onAddCustomer={handleAddCustomer}
+            onSaveKnowledge={handleSaveKnowledge}
           />
         )}
       </main>
